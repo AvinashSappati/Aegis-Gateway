@@ -21,34 +21,34 @@ Aegis shifts the computational burden of traffic management away from the primar
 aegis-gateway/
 │
 ├── algorithms/                 # OOP Strategy Pattern Classes
-│   ├── TokenBucket.js          # Fluid traffic control (Lazy Refill)
+│   ├── TokenBucket.js          # Fluid traffic control 
 │   ├── FixedWindow.js          # Strict cutoff logic
 │   └── SlidingWindow.js        # High-accuracy timestamp logging
 │
-├── .env                        # Secret variables (Git Ignored)
+├── .env                        
 ├── docker-compose.yml          # Container orchestration map
-├── gatewayConfig.js            # O(1) Policy Routing Hash Map
-├── redisClient.js              # Database connection singleton
-└── server.js                   # The Core Async Gateway Engine
+├── gatewayConfig.js            # Policy Routing Hash Map
+├── redisClient.js             
+└── server.js                   
 ```
 
 ### Network Flow Topology
 
 ```mermaid
-sequenceDiagram
-    participant Client as Student Device
-    participant Aegis as Aegis Gateway (Render)
-    participant Redis as Upstash Redis (Serverless)
-    participant Core as Backend
-
-    Client->>Aegis: HTTP POST /api/book-cab
-    Note over Aegis: O(1) Hash Map Lookup:<br/>Assigns SlidingWindow
-    Aegis->>Redis: GET aegis:/api/book-cab:[User_ID]
-    Redis-->>Aegis: Returns Timestamp Array
-    Note over Aegis: Algorithm evaluates velocity.<br/>If limit exceeded -> Drop.
-    Aegis->>Redis: SET Updated Timestamps
-    Aegis->>Core: Proxies Safe Traffic
-    Core-->>Client: 200 OK 
+flowchart LR
+    Client --> |1. Request| Aegis[Aegis Gateway]
+    Aegis --> |2. Query Tokens| Redis[(Upstash Redis)]
+    Redis --> |3. Allow or Block| Aegis
+    Aegis --> |4. Proxy Safe Traffic| Core[Server]
+    Core --> |5. DB Query| DB[(Database)]
+    DB --> |6. Data | Core
+    Core --> |7. JSON Response| Aegis
+    Aegis --> |8. Response | Client
+    
+    style Aegis fill:#2d3748,color:#fff,stroke:#4a5568,stroke-width:2px
+    style Core fill:#2b6cb0,color:#fff,stroke:#2c5282,stroke-width:2px
+    style Redis fill:#c53030,color:#fff,stroke:#9b2c2c,stroke-width:2px
+    style DB fill:#276749,color:#fff,stroke:#2f855a,stroke-width:2px
 ```
 
 ---
