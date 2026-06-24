@@ -1,6 +1,6 @@
 # Aegis: Distributed API Gateway & Policy Engine
 
-A high-performance, Low-Level Design (LLD) focused API Gateway built with Node.js and Redis. Aegis acts as a reverse proxy shield, protecting the core **KGPTransit** microservices from traffic surges, brute-force attacks, and DDoS attempts using dynamic, route-based rate limiting.
+A high-performance, Low-Level Design (LLD) focused API Gateway built with Node.js and Redis. Aegis acts as a reverse proxy shield, protecting the core **Backend** microservices from traffic surges, brute-force attacks, and DDoS attempts using dynamic, route-based rate limiting.
 
 ---
 
@@ -32,6 +32,54 @@ aegis-gateway/
 └── server.js                   # The Core Async Gateway Engine
 ```
 
+### Network Flow Topology
+
+```mermaid
+sequenceDiagram
+    participant Client as Student Device
+    participant Aegis as Aegis Gateway (Render)
+    participant Redis as Upstash Redis (Serverless)
+    participant Core as Backend
+
+    Client->>Aegis: HTTP POST /api/book-cab
+    Note over Aegis: O(1) Hash Map Lookup:<br/>Assigns SlidingWindow
+    Aegis->>Redis: GET aegis:/api/book-cab:[User_ID]
+    Redis-->>Aegis: Returns Timestamp Array
+    Note over Aegis: Algorithm evaluates velocity.<br/>If limit exceeded -> Drop.
+    Aegis->>Redis: SET Updated Timestamps
+    Aegis->>Core: Proxies Safe Traffic
+    Core-->>Client: 200 OK 
+```
+
+---
+
+## Traffic Capacity & System Limits
+
+Aegis is designed to scale horizontally, but the current MVP operates on Serverless Free Tiers to maintain a zero-cost infrastructure footprint. 
+
+| Infrastructure Component | Current Tier Limit | Gateway Capacity |
+| :--- | :--- | :--- |
+| **Upstash Redis** | 10,000 Commands / Day | **5,000 HTTP Requests / Day** (Each Aegis check requires 1 GET and 1 SET operation). |
+| **Render Web Service** | 512 MB RAM / 0.1 CPU | **~500 Concurrent Connections** (Node.js async non-blocking I/O). |
+| **Latency Target** | < 5ms to Redis | **Near-Zero Proxy Overhead** due to geographically close Serverless DB instances. |
+
+*Note: For enterprise scale, swapping the Upstash Free Tier for a dedicated Redis Cluster allows Aegis to comfortably process 100,000+ Requests Per Minute (RPM).*
+
+---
+
+## Active Rate-Limiting Policies
+
+To protect a new microservice, developers simply define the rule in the Hash Map. Aegis dynamically loads the correct OOP algorithm instance.
+
+| Target Route | Algorithm | Limit | Refill / Window | Purpose |
+| :--- | :--- | :--- | :--- | :--- |
+| `/api/login` | **Fixed Window** | 5 Requests | 60 Seconds | Strict cutoff to prevent brute-force password attacks. |
+| `/api/book-cab` | **Sliding Window** | 10 Requests | 30 Seconds | High-accuracy logging for heavy DB-query routes. |
+| `DEFAULT` | **Token Bucket** | 50 Requests | 1 Token / Sec | Fail-safe fluid traffic control for all unlisted microservices. |
+
+---
+
+
 ---
 
 ## How to Use & Configure
@@ -41,10 +89,7 @@ Aegis operates as a completely decoupled microservice. Create a `.env` file in t
 
 ```env
 PORT=8000
-# Target your local backend or a live cloud URL
-TARGET_BACKEND=[https://kgp-pooling.onrender.com](https://kgp-pooling.onrender.com) 
-
-# Use a local Docker Redis or a Serverless Upstash instance
+TARGET_BACKEND=BACKEND_URL
 REDIS_URL=rediss://default:password@your-endpoint.upstash.io:6379 
 ```
 
@@ -91,15 +136,3 @@ Aegis is designed to run completely isolated from the core backend.
 *(Note: For local testing, a complete `docker-compose.yml` is included to spin up Aegis and Redis in an isolated Docker Bridge Network).*
 
 ---
-
-## Technical Q&A & Architectural Trade-offs
-
-### Q: Why use Redis strictly for Rate Limiting and not Data Caching?
-**A:** Separation of Concerns and Security. If the Gateway caches application domain data (like user profiles or ride history), we introduce a severe risk of **Cross-User Data Leakage**, especially on authenticated routes. Aegis is strictly a network velocity tracker. Data caching is handled downstream at the application layer where session logic lives.
-
-### Q: How does the Gateway handle the "Campus NAT Problem"?
-**A:** In a university environment, hundreds of students share a single public IP address through the hall routers. Strict IP-based rate limiting would cause a massive false-positive block (Denial of Service) for legitimate students trying to coordinate cabs simultaneously. 
-**Solution:** Aegis is designed with a Two-Tier strategy. For unauthenticated routes (`/login`), it uses high-capacity IP limits. For core app features, Aegis decodes the incoming JWT at the edge layer and uses the unique `User ID` as the Redis Key, ensuring fair application usage regardless of network topology.
-
-### Q: Why build a custom Gateway instead of using libraries like `express-rate-limit`?
-**A:** Most basic NPM libraries store state in local memory. If the platform scales horizontally to three Gateway containers, a user could bypass limits by hitting different containers. By writing the core OOP algorithms from scratch and wiring them directly to a distributed Redis client, Aegis guarantees strict, centralized enforcement across the entire cluster.
