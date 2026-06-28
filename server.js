@@ -34,8 +34,27 @@ const aegisShield = async (req, res, next) => {
         
         const policyKey = gatewayConfig[requestPath] ? requestPath : "DEFAULT";
         const limiter = activeAlgorithms[policyKey];
-        const trackingKey = `${policyKey}:${userIP}`;
-
+        
+        let trackingKey;
+        const authHeader = req.headers.authorization;
+        
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            try {
+                // Authenticated User (Bypasses Campus IP)
+                const token = authHeader.split(' ')[1];
+                const decoded = jwt.verify(token, process.env.JWT_SECRET);
+                
+                // Use exact User ID for the Redis Hash Map
+                trackingKey = `${policyKey}:user_${decoded.userId}`;
+            } catch (err) {
+                // Fallback if token is expired/invalid
+                trackingKey = `${policyKey}:${req.ip}`;
+            }
+        } else {
+            // Unauthenticated User (Login/Signup via IP)
+            trackingKey = `${policyKey}:${req.ip}`;
+        }
+        
         // const startTime = Date.now();
         const isAllowed = await limiter.handleRequest(trackingKey);
         // const latency = Date.now() - startTime;
