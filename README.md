@@ -90,7 +90,8 @@ Aegis operates as a completely decoupled microservice. Create a `.env` file in t
 ```env
 PORT=8000
 TARGET_BACKEND=BACKEND_URL
-REDIS_URL=rediss://default:password@your-endpoint.upstash.io:6379 
+REDIS_URL=rediss://default:password@your-endpoint.upstash.io:6379
+JWT_SECRET=your_super_secret_jwt_key
 ```
 
 ### 2. The Policy Engine (`gatewayConfig.js`)
