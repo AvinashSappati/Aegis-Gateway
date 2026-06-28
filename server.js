@@ -36,8 +36,10 @@ const aegisShield = async (req, res, next) => {
         const limiter = activeAlgorithms[policyKey];
         const trackingKey = `${policyKey}:${userIP}`;
 
+        // const startTime = Date.now();
         const isAllowed = await limiter.handleRequest(trackingKey);
-
+        // const latency = Date.now() - startTime;
+        // console.log(`[Aegis Benchmark] Redis overhead for ${requestPath}: ${latency}ms`);
         if (!isAllowed) {
             return res.status(429).json({
                 error: "Too Many Requests",
